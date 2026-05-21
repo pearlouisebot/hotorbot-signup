@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Camera Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 600px; 
+            margin: 50px auto; 
+            padding: 20px; 
+        }
+        video { 
+            width: 100%; 
+            max-width: 400px; 
+            background: #000; 
+            border-radius: 10px;
+        }
+        button { 
+            padding: 15px 30px; 
+            font-size: 16px; 
+            margin: 10px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+            background: #e8f4ff;
+            border: 1px solid #0066cc;
+        }
+        .error { 
+            background: #ffe8e8; 
+            border: 1px solid #cc0000; 
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Camera Debug Test</h1>
+    <p>Simple test to check if camera access works</p>
+    
+    <video id="video" autoplay muted playsinline></video>
+    <br>
+    
+    <button id="startBtn" onclick="startCamera()">Start Camera</button>
+    <button id="stopBtn" onclick="stopCamera()" disabled>Stop Camera</button>
+    
+    <div id="status" class="status">Ready to test camera access</div>
+    <div id="debug"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const debug = document.getElementById('debug');
+        
+        let stream;
+
+        function log(message) {
+            console.log(message);
+            debug.innerHTML += `<p style="font-size: 12px; color: #666;">${message}</p>`;
+        }
+
+        function setStatus(message, isError = false) {
+            status.textContent = message;
+            status.className = isError ? 'status error' : 'status';
+            log(`Status: ${message}`);
+        }
+
+        async function startCamera() {
+            try {
+                log('Starting camera...');
+                setStatus('Requesting camera permission...');
+                
+                // Check browser support
+                if (!navigator.mediaDevices) {
+                    throw new Error('navigator.mediaDevices not available');
+                }
+                
+                if (!navigator.mediaDevices.getUserMedia) {
+                    throw new Error('getUserMedia not available');
+                }
+                
+                log('Browser support confirmed');
+                
+                const constraints = {
+                    video: { 
+                        width: { ideal: 640 }, 
+                        height: { ideal: 480 }
+                    },
+                    audio: true
+                };
+                
+                log('Calling getUserMedia...');
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                log('Stream obtained, setting video source...');
+                video.srcObject = stream;
+                
+                log('Waiting for video metadata...');
+                await new Promise((resolve, reject) => {
+                    video.onloadedmetadata = () => {
+                        log('Video metadata loaded');
+                        resolve();
+                    };
+                    video.onerror = reject;
+                    setTimeout(reject, 10000); // 10 second timeout
+                });
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                setStatus('✅ Camera started successfully!');
+                
+            } catch (error) {
+                log(`Error: ${error.name} - ${error.message}`);
+                
+                let errorMsg = 'Camera failed: ';
+                if (error.name === 'NotAllowedError') {
+                    errorMsg += 'Permission denied. Please allow camera access.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMsg += 'No camera found.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMsg += 'Camera not supported.';
+                } else {
+                    errorMsg += error.message;
+                }
+                
+                setStatus(errorMsg, true);
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                setStatus('Camera stopped');
+                log('Camera stopped');
+            }
+        }
+
+        // Browser support check
+        log(`Browser: ${navigator.userAgent}`);
+        log(`MediaDevices available: ${!!navigator.mediaDevices}`);
+        log(`getUserMedia available: ${!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)}`);
+        log(`MediaRecorder available: ${!!window.MediaRecorder}`);
+    </script>
+</body>
+</html>
