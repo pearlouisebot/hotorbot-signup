@@ -209,7 +209,7 @@
     <script>
         // Supabase configuration
         const supabaseUrl = 'https://dvxkihjlkilmapzaoasg.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR2eGtpaGpsa2lsbWFwemFvYXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYwMDE4MzcsImV4cCI6MjA0MTU3NzgzN30.Hrf8LbJBNPBz4_k5KR5_kJhzv1FU7F6-CvuiUkYJc1Y';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR2eGtpaGpsa2lsbWFwemFvYXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4MDA3MTEsImV4cCI6MjA4NzM3NjcxMX0.bMId5gI4TwHHGjvgV2R4UdA1knCXFUC0b4kBPEjszXE';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
         let mediaRecorder;
@@ -229,23 +229,48 @@
 
         async function startCamera() {
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
+                showStatus('Requesting camera permission...', 'info');
+                
+                // Check if getUserMedia is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera access not supported in this browser');
+                }
+
+                const constraints = { 
                     video: { 
-                        width: 640, 
-                        height: 480,
+                        width: { ideal: 640 }, 
+                        height: { ideal: 480 },
                         facingMode: 'user'
                     }, 
                     audio: true 
-                });
+                };
+
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = stream;
+                
+                // Wait for video to load
+                await new Promise((resolve) => {
+                    videoElement.onloadedmetadata = resolve;
+                });
                 
                 startCameraBtn.style.display = 'none';
                 recordBtn.disabled = false;
+                recordBtn.style.display = 'inline-block';
                 
                 showStatus('Camera ready! Click "Start Recording" when you\'re ready.', 'info');
             } catch (err) {
-                showStatus('Error accessing camera. Please ensure you have a camera connected and permissions granted.', 'error');
-                console.error('Error accessing media devices:', err);
+                let errorMessage = 'Camera access failed. ';
+                if (err.name === 'NotAllowedError') {
+                    errorMessage += 'Please allow camera permissions and try again.';
+                } else if (err.name === 'NotFoundError') {
+                    errorMessage += 'No camera found. Please connect a camera.';
+                } else if (err.name === 'NotSupportedError') {
+                    errorMessage += 'Camera not supported in this browser.';
+                } else {
+                    errorMessage += err.message;
+                }
+                showStatus(errorMessage, 'error');
+                console.error('Camera error:', err);
             }
         }
 
@@ -262,11 +287,29 @@
                 return;
             }
 
+            if (!stream) {
+                showStatus('Camera not ready. Please start camera first.', 'error');
+                return;
+            }
+
             try {
                 recordedChunks = [];
-                mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: 'video/webm;codecs=vp8,opus'
-                });
+                
+                // Try different video formats for browser compatibility
+                let options;
+                if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+                    options = { mimeType: 'video/webm;codecs=vp9,opus' };
+                } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+                    options = { mimeType: 'video/webm;codecs=vp8,opus' };
+                } else if (MediaRecorder.isTypeSupported('video/webm')) {
+                    options = { mimeType: 'video/webm' };
+                } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+                    options = { mimeType: 'video/mp4' };
+                } else {
+                    options = {};
+                }
+
+                mediaRecorder = new MediaRecorder(stream, options);
 
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
@@ -280,6 +323,11 @@
                     stopBtn.style.display = 'none';
                     uploadBtn.style.display = 'inline-block';
                     uploadBtn.disabled = false;
+                };
+
+                mediaRecorder.onerror = (event) => {
+                    showStatus('Recording error occurred. Please try again.', 'error');
+                    console.error('MediaRecorder error:', event.error);
                 };
 
                 mediaRecorder.start();
@@ -301,7 +349,7 @@
                 }, 30000);
                 
             } catch (err) {
-                showStatus('Error starting recording. Please try again.', 'error');
+                showStatus(`Recording failed: ${err.message}`, 'error');
                 console.error('Error starting recording:', err);
             }
         }
@@ -402,8 +450,25 @@
             statusDiv.style.display = 'block';
         }
 
-        // Initialize
-        showStatus('Click "Start Camera" to begin your video signup', 'info');
+        // Check browser support on load
+        window.addEventListener('load', () => {
+            console.log('Page loaded, checking browser support...');
+            
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showStatus('Camera access not supported in this browser. Please use Chrome, Firefox, or Safari.', 'error');
+                startCameraBtn.disabled = true;
+                return;
+            }
+            
+            if (!window.MediaRecorder) {
+                showStatus('Video recording not supported in this browser. Please use a modern browser.', 'error');
+                startCameraBtn.disabled = true;
+                return;
+            }
+            
+            console.log('Browser supports camera and recording');
+            showStatus('Click "Start Camera" to begin your video signup', 'info');
+        });
     </script>
 </body>
 </html>
